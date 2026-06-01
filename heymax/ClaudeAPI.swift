@@ -25,8 +25,9 @@ class ClaudeAPI {
     static let shared = ClaudeAPI()
 
     // TODO: Move to secure storage before shipping
-    private let apiKey = "YOUR_CLAUDE_API_KEY"
-    private let model = "claude-sonnet-4-20250514"
+    private let apiKey = "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"
+    private let fastModel = "claude-haiku-4-5-20251001"
+    private let smartModel = "claude-sonnet-4-20250514"
     private let endpoint = "https://api.anthropic.com/v1/messages"
 
     private let systemPrompt = """
@@ -69,11 +70,21 @@ class ClaudeAPI {
     - If they're just asking a question, just answer it.
     """
 
+    // Keywords that mean the user wants to see/analyze their screen
+    private let screenKeywords = ["screen", "see", "look", "looking at", "what's this", "what is this", "read", "showing", "display"]
+
+    private func needsScreenshot(command: String) -> Bool {
+        let lower = command.lowercased()
+        return screenKeywords.contains(where: { lower.contains($0) })
+    }
+
     func process(command: String, screenshot: String?) async -> ClaudeResponse {
+        let useScreenshot = needsScreenshot(command: command)
+        let model = useScreenshot ? smartModel : fastModel
+
         var content: [[String: Any]] = []
 
-        // Add screenshot if available
-        if let base64 = screenshot {
+        if useScreenshot, let base64 = screenshot {
             content.append([
                 "type": "image",
                 "source": [
@@ -91,7 +102,7 @@ class ClaudeAPI {
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 1024,
+            "max_tokens": 256,
             "system": systemPrompt,
             "messages": [
                 ["role": "user", "content": content]
@@ -108,7 +119,7 @@ class ClaudeAPI {
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.timeoutInterval = 30
+        request.timeoutInterval = 15
 
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
@@ -120,7 +131,6 @@ class ClaudeAPI {
                 return ClaudeResponse(text: "Couldn't understand the response.", action: nil)
             }
 
-            // Parse action if present
             let action = parseAction(from: responseText)
             let cleanText = responseText.components(separatedBy: "###ACTION:").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? responseText
 

@@ -22,7 +22,6 @@ struct ActionRunner {
                 NSWorkspace.shared.openApplication(at: appURL, configuration: config)
                 print("[Action] Opened app: \(name)")
             } else {
-                // Fallback: try opening by name
                 NSWorkspace.shared.launchApplication(name)
                 print("[Action] Launched app by name: \(name)")
             }
@@ -38,13 +37,13 @@ struct ActionRunner {
             }
 
         case .playSpotify(let query):
-            // Open Spotify search via URI, then use AppleScript to play
-            let searchURL = "https://open.spotify.com/search/\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)"
-            if let u = URL(string: searchURL) {
-                NSWorkspace.shared.open(u)
+            // Use Spotify URI to open directly in the app
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            if let uri = URL(string: "spotify:search:\(encoded)") {
+                NSWorkspace.shared.open(uri)
             }
-            // Also try AppleScript to start playback
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            // Give Spotify a moment to load, then hit play
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 let script = """
                 tell application "Spotify"
                     activate
@@ -68,7 +67,6 @@ struct ActionRunner {
             print("[Action] Set volume to \(clamped)%")
 
         case .typeText(let text):
-            // Use AppleScript to type text at cursor
             let escaped = text.replacingOccurrences(of: "\"", with: "\\\"")
             let script = """
             tell application "System Events"

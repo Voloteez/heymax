@@ -159,10 +159,11 @@ class VoiceEngine: NSObject, ObservableObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                     OverlayWindow.shared?.hide()
                 }
+
+                // Restart listening after processing is done
+                self.stopAndRestart()
             }
         }
-
-        stopAndRestart()
     }
 
     // MARK: - Stop / Restart
