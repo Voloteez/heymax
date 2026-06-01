@@ -37,44 +37,35 @@ struct ActionRunner {
             }
 
         case .playSpotify(let query):
-            // Use AppleScript to search and play directly in Spotify
-            let escaped = query.replacingOccurrences(of: "\"", with: "\\\"")
-            let script = """
-            tell application "Spotify"
-                activate
-            end tell
-            delay 1
-            tell application "System Events"
-                tell process "Spotify"
-                    keystroke "l" using command down
-                    delay 0.3
-                    keystroke "a" using command down
-                    keystroke "\(escaped)"
-                    delay 0.8
-                    key code 36
-                    delay 2
-                    key code 36
-                end tell
-            end tell
-            delay 2
-            tell application "Spotify"
-                if player state is not playing then
-                    play
-                end if
-            end tell
-            delay 1
-            tell application "Spotify"
-                if player state is not playing then
-                    play
-                end if
-            end tell
-            """
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
             DispatchQueue.global().async {
-                let proc = Process()
-                proc.launchPath = "/usr/bin/osascript"
-                proc.arguments = ["-e", script]
-                try? proc.run()
-                proc.waitUntilExit()
+                // Use open command to launch spotify URI — this always opens in the app
+                let open = Process()
+                open.launchPath = "/usr/bin/open"
+                open.arguments = ["-a", "Spotify", "spotify:search:\(encoded)"]
+                try? open.run()
+                open.waitUntilExit()
+
+                // Wait for search results to load, then play first result via Enter
+                Thread.sleep(forTimeInterval: 2.5)
+
+                let play = Process()
+                play.launchPath = "/usr/bin/osascript"
+                play.arguments = ["-e", """
+                    tell application "System Events"
+                        tell process "Spotify"
+                            key code 36
+                        end tell
+                    end tell
+                    delay 1.5
+                    tell application "System Events"
+                        tell process "Spotify"
+                            key code 36
+                        end tell
+                    end tell
+                """]
+                try? play.run()
+                play.waitUntilExit()
             }
             print("[Action] Playing on Spotify: \(query)")
 
