@@ -46,43 +46,22 @@ struct ActionRunner {
             print("[Action] Opened Spotify search: \(query)")
 
         case .searchYouTube(let query):
-            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-            let ytURL = "https://www.youtube.com/results?search_query=\(encoded)"
-            // Open the search page
-            if let url = URL(string: ytURL) {
-                NSWorkspace.shared.open(url)
-            }
-            // After page loads, click the first video result via JavaScript
-            DispatchQueue.global().async {
-                Thread.sleep(forTimeInterval: 3.0)
-                let js = "document.querySelector('ytd-video-renderer a#video-title, ytd-rich-item-renderer a#video-title-link').click();"
-                // Try Chrome first, then Safari
-                let chrome = Process()
-                let chromePipe = Pipe()
-                chrome.launchPath = "/usr/bin/osascript"
-                chrome.standardError = chromePipe
-                chrome.arguments = ["-e", """
-                    tell application "Google Chrome"
-                        execute front window's active tab javascript "\(js)"
-                    end tell
-                """]
-                try? chrome.run()
-                chrome.waitUntilExit()
-
-                let err = String(data: chromePipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                if !err.isEmpty {
-                    // Chrome didn't work, try Safari
-                    let safari = Process()
-                    safari.launchPath = "/usr/bin/osascript"
-                    safari.arguments = ["-e", """
-                        tell application "Safari"
-                            do JavaScript "\(js)" in current tab of front window
-                        end tell
-                    """]
-                    try? safari.run()
-                    safari.waitUntilExit()
+            Task {
+                let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+                // Fetch YouTube search page and extract first video ID
+                if let videoID = await Self.getFirstYouTubeVideoID(query: encoded) {
+                    let watchURL = "https://www.youtube.com/watch?v=\(videoID)"
+                    if let url = URL(string: watchURL) {
+                        NSWorkspace.shared.open(url)
+                        print("[Action] Playing YouTube video: \(watchURL)")
+                    }
+                } else {
+                    // Fallback: just open search
+                    if let url = URL(string: "https://www.youtube.com/results?search_query=\(encoded)") {
+                        NSWorkspace.shared.open(url)
+                        print("[Action] Fallback: YouTube search")
+                    }
                 }
-                print("[Action] YouTube auto-play triggered")
             }
 
         case .setVolume(let level):
@@ -107,6 +86,36 @@ struct ActionRunner {
             try? proc.run()
             print("[Action] Typed text")
         }
+    }
+
+    // MARK: - YouTube Video ID Extraction
+
+    private static func getFirstYouTubeVideoID(query: String) async -> String? {
+        guard let url = URL(string: "https://www.youtube.com/results?search_query=\(query)") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 10
+
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let html = String(data: data, encoding: .utf8) else { return nil }
+
+            // YouTube embeds video IDs in the page as "videoId":"XXXXXXXXXXX"
+            if let range = html.range(of: "\"videoId\":\"") {
+                let after = html[range.upperBound...]
+                if let endRange = after.range(of: "\"") {
+                    let videoID = String(after[..<endRange.lowerBound])
+                    if videoID.count == 11 {
+                        print("[YouTube] Found video ID: \(videoID)")
+                        return videoID
+                    }
+                }
+            }
+        } catch {
+            print("[YouTube] Fetch error: \(error)")
+        }
+        return nil
     }
 
     // MARK: - Bundle ID Lookup
