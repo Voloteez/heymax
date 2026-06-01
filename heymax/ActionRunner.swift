@@ -50,15 +50,23 @@ struct ActionRunner {
                     delay 0.3
                     keystroke "a" using command down
                     keystroke "\(escaped)"
-                    delay 0.5
+                    delay 0.8
                     key code 36
-                    delay 1
+                    delay 2
                     key code 36
                 end tell
             end tell
+            delay 2
+            tell application "Spotify"
+                if player state is not playing then
+                    play
+                end if
+            end tell
             delay 1
             tell application "Spotify"
-                play
+                if player state is not playing then
+                    play
+                end if
             end tell
             """
             DispatchQueue.global().async {
