@@ -39,7 +39,7 @@ struct ActionRunner {
         case .playSpotify(let query):
             let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
             DispatchQueue.global().async {
-                // Open search in Spotify
+                // Open search in Spotify app via URI
                 let open = Process()
                 open.launchPath = "/usr/bin/open"
                 open.arguments = ["-a", "Spotify", "spotify:search:\(encoded)"]
@@ -47,49 +47,33 @@ struct ActionRunner {
                 open.waitUntilExit()
                 print("[Action] Opened Spotify search")
 
+                // Wait for results to load
                 Thread.sleep(forTimeInterval: 3.0)
 
-                // Get Spotify window position and click the green play button
-                let script = Process()
-                let pipe = Pipe()
-                script.launchPath = "/usr/bin/osascript"
-                script.standardOutput = pipe
-                script.arguments = ["-e", """
-                    tell application "Spotify" to activate
-                    delay 0.3
-                    tell application "System Events"
-                        tell process "Spotify"
-                            set frontmost to true
-                            set winPos to position of window 1
-                            set winSize to size of window 1
-                            return (item 1 of winPos) & "," & (item 2 of winPos) & "," & (item 1 of winSize) & "," & (item 2 of winSize)
-                        end tell
+                // Use Spotify's native AppleScript to play (no Accessibility needed)
+                let play = Process()
+                let errPipe = Pipe()
+                play.launchPath = "/usr/bin/osascript"
+                play.standardError = errPipe
+                play.arguments = ["-e", """
+                    tell application "Spotify"
+                        activate
+                        delay 0.5
+                        play
+                        delay 1
+                        if player state is not playing then
+                            play
+                        end if
                     end tell
                 """]
-                try? script.run()
-                script.waitUntilExit()
+                try? play.run()
+                play.waitUntilExit()
 
-                let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let parts = output.components(separatedBy: ", ")
-
-                if parts.count == 4,
-                   let winX = Double(parts[0]),
-                   let winY = Double(parts[1]),
-                   let winW = Double(parts[2]) {
-                    // The green play button on the top result card
-                    let clickX = winX + winW * 0.62
-                    let clickY = winY + 230
-
-                    // Click using CGEvent
-                    let point = CGPoint(x: clickX, y: clickY)
-                    let mouseDown = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
-                    let mouseUp = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
-                    mouseDown?.post(tap: .cghidEventTap)
-                    Thread.sleep(forTimeInterval: 0.05)
-                    mouseUp?.post(tap: .cghidEventTap)
-                    print("[Action] Clicked play button at \(clickX), \(clickY)")
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                if let err = String(data: errData, encoding: .utf8), !err.isEmpty {
+                    print("[Action] Spotify AppleScript error: \(err)")
                 } else {
-                    print("[Action] Could not get Spotify window position: \(output)")
+                    print("[Action] Spotify play command sent")
                 }
             }
             print("[Action] Playing on Spotify: \(query)")
