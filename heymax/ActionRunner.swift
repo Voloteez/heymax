@@ -37,30 +37,19 @@ struct ActionRunner {
             }
 
         case .playSpotify(let query):
-            Task {
-                // Search for the exact track via Spotify Web API
-                if let trackURI = await SpotifySearch.shared.searchTrack(query: query) {
-                    // Play the specific track via AppleScript
-                    let play = Process()
-                    play.launchPath = "/usr/bin/osascript"
-                    play.arguments = ["-e", """
-                        tell application "Spotify"
-                            activate
-                            play track "\(trackURI)"
-                        end tell
-                    """]
-                    try? play.run()
-                    play.waitUntilExit()
-                    print("[Action] Playing track: \(trackURI)")
-                } else {
-                    // Fallback: open search in Spotify
-                    let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-                    let open = Process()
-                    open.launchPath = "/usr/bin/open"
-                    open.arguments = ["-a", "Spotify", "spotify:search:\(encoded)"]
-                    try? open.run()
-                    print("[Action] Fallback: opened Spotify search")
-                }
+            // Open search in Spotify app
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            let proc = Process()
+            proc.launchPath = "/usr/bin/open"
+            proc.arguments = ["-a", "Spotify", "spotify:search:\(encoded)"]
+            try? proc.run()
+            print("[Action] Opened Spotify search: \(query)")
+
+        case .searchYouTube(let query):
+            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            if let url = URL(string: "https://www.youtube.com/results?search_query=\(encoded)") {
+                NSWorkspace.shared.open(url)
+                print("[Action] YouTube search: \(query)")
             }
 
         case .setVolume(let level):

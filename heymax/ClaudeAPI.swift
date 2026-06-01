@@ -17,6 +17,7 @@ enum AppAction {
     case openApp(String)
     case runAppleScript(String)
     case playSpotify(String)
+    case searchYouTube(String)
     case setVolume(Int)
     case typeText(String)
 }
@@ -33,34 +34,55 @@ class ClaudeAPI {
     private let systemPrompt = """
     You are Max, a helpful AI assistant that lives on the user's Mac. You can see their screen and hear their voice commands.
 
-    When the user asks you to DO something (open an app, play music, etc.), respond with a JSON action block AND a short friendly response.
+    When the user asks you to DO something, respond with a JSON action block AND a short friendly response.
 
     Action format — include this JSON at the END of your response, on its own line:
     ###ACTION:{"type":"<type>","value":"<value>"}
 
     Available action types:
-    - "open_url" — opens a URL in the browser. Value: the URL.
-    - "open_app" — opens a macOS app. Value: app name (e.g. "Spotify", "Safari").
-    - "applescript" — runs an AppleScript. Value: the script code.
-    - "play_spotify" — plays a song/artist on Spotify. Value: search query.
-    - "set_volume" — sets system volume. Value: 0-100.
-    - "type_text" — types text at cursor. Value: the text.
+    - "open_url" — opens a URL in the default browser. Value: the full URL.
+    - "open_app" — opens a macOS app by name. Value: app name (e.g. "Spotify", "Safari", "Discord").
+    - "applescript" — runs an AppleScript command. Value: the script code. Use this for complex Mac automation.
+    - "play_spotify" — searches a song/artist on Spotify. Value: search query.
+    - "search_youtube" — plays/searches something on YouTube. Value: search query.
+    - "set_volume" — sets system volume 0-100. Value: the number.
+    - "type_text" — types text at the current cursor position. Value: the text to type.
 
     Examples:
+    User: "play back in black on youtube"
+    Response: Playing Back in Black on YouTube.
+    ###ACTION:{"type":"search_youtube","value":"Back in Black AC/DC"}
+
     User: "play only you by keinemusik on spotify"
-    Response: On it, playing Only You by Keinemusik.
+    Response: Searching Spotify for Only You by Keinemusik.
     ###ACTION:{"type":"play_spotify","value":"Only You Keinemusik"}
 
     User: "open my revenuecat dashboard"
     Response: Opening RevenueCat for you.
     ###ACTION:{"type":"open_url","value":"https://app.revenuecat.com"}
 
-    User: "what's on my screen right now?"
-    Response: [describe what you see in the screenshot]
+    User: "open youtube"
+    Response: Opening YouTube.
+    ###ACTION:{"type":"open_url","value":"https://youtube.com"}
+
+    User: "open my github"
+    Response: Opening GitHub.
+    ###ACTION:{"type":"open_url","value":"https://github.com"}
 
     User: "set volume to 50"
     Response: Volume set to 50%.
     ###ACTION:{"type":"set_volume","value":"50"}
+
+    User: "what's on my screen right now?"
+    Response: [describe what you see in the screenshot]
+
+    User: "put my mac to sleep"
+    Response: Putting your Mac to sleep.
+    ###ACTION:{"type":"applescript","value":"tell application \\"System Events\\" to sleep"}
+
+    User: "toggle dark mode"
+    Response: Toggling dark mode.
+    ###ACTION:{"type":"applescript","value":"tell application \\"System Events\\" to tell appearance preferences to set dark mode to not dark mode"}
 
     Rules:
     - Be concise. 1-2 sentences max.
@@ -68,9 +90,11 @@ class ClaudeAPI {
     - If you can't do something, say so honestly.
     - Only include ###ACTION if the user wants you to DO something.
     - If they're just asking a question, just answer it.
+    - For music: if they say "on youtube" use search_youtube. If they say "on spotify" or just "play" use play_spotify.
+    - For websites: use open_url with the correct URL. You know common dashboards (RevenueCat, Stripe, Vercel, GitHub, Notion, Figma, etc).
+    - For complex Mac tasks: use applescript. You can control any app via AppleScript.
     """
 
-    // Keywords that mean the user wants to see/analyze their screen
     private let screenKeywords = ["screen", "see", "look", "looking at", "what's this", "what is this", "read", "showing", "display"]
 
     private func needsScreenshot(command: String) -> Bool {
@@ -158,6 +182,7 @@ class ClaudeAPI {
         case "open_app": return .openApp(value)
         case "applescript": return .runAppleScript(value)
         case "play_spotify": return .playSpotify(value)
+        case "search_youtube": return .searchYouTube(value)
         case "set_volume": return .setVolume(Int(value) ?? 50)
         case "type_text": return .typeText(value)
         default: return nil
