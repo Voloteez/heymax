@@ -141,10 +141,8 @@ class VoiceEngine: NSObject, ObservableObject {
 
         print("[VoiceEngine] Processing command: \(command)")
 
-        // Only capture screen if the command is about what's on screen
         Task {
-            let screenKeywords = ["screen", "see", "look", "looking at", "what's this", "what is this", "read", "showing", "display"]
-            let needsScreen = screenKeywords.contains(where: { command.lowercased().contains($0) })
+            let needsScreen = ClaudeAPI.shared.needsScreenshot(command: command)
             let screenshot = needsScreen ? await ScreenCapture.capture() : nil
             let response = await ClaudeAPI.shared.process(command: command, screenshot: screenshot)
 
@@ -157,12 +155,12 @@ class VoiceEngine: NSObject, ObservableObject {
 
                 OverlayWindow.shared?.show(state: .response(response.text))
 
-                // Auto-hide after 5 seconds
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                // Teaching responses stay longer
+                let hideDelay: Double = response.isTeaching ? 15 : 5
+                DispatchQueue.main.asyncAfter(deadline: .now() + hideDelay) {
                     OverlayWindow.shared?.hide()
                 }
 
-                // Restart listening after processing is done
                 self.stopAndRestart()
             }
         }

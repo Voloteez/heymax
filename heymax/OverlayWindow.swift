@@ -3,7 +3,7 @@
 //  heymax
 //
 //  Floating overlay that shows listening/thinking/response states.
-//  Always on top, click-through, appears near the cursor.
+//  Expands for teaching mode with scrollable content.
 
 import SwiftUI
 import Cocoa
@@ -31,7 +31,7 @@ class OverlayWindow: NSObject {
 
     private func setupWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 120),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 200),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -51,17 +51,29 @@ class OverlayWindow: NSObject {
         DispatchQueue.main.async {
             self.viewModel.state = state
 
-            // Position near top-center of screen
+            // Resize based on content
+            let isTeaching: Bool
+            switch state {
+            case .response(let text):
+                isTeaching = text.count > 200
+            default:
+                isTeaching = false
+            }
+
+            let width: CGFloat = isTeaching ? 480 : 380
+            let height: CGFloat = isTeaching ? 360 : 120
+
+            self.window?.setContentSize(NSSize(width: width, height: height))
+
             if let screen = NSScreen.main {
                 let screenFrame = screen.visibleFrame
-                let x = screenFrame.midX - 170
-                let y = screenFrame.maxY - 140
+                let x = screenFrame.midX - width / 2
+                let y = screenFrame.maxY - height - 20
                 self.window?.setFrameOrigin(NSPoint(x: x, y: y))
             }
 
             self.window?.orderFront(nil)
 
-            // Animate in
             self.window?.alphaValue = 0
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
@@ -93,26 +105,62 @@ class OverlayViewModel: ObservableObject {
 struct OverlayView: View {
     @ObservedObject var viewModel: OverlayViewModel
 
-    var body: some View {
-        HStack(spacing: 12) {
-            // Status indicator
-            statusIcon
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.6))
-                    .lineLimit(3)
-            }
-
-            Spacer()
+    private var isLongResponse: Bool {
+        if case .response(let text) = viewModel.state {
+            return text.count > 200
         }
-        .padding(16)
-        .frame(width: 340, alignment: .leading)
+        return false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 10) {
+                statusIcon
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    if !isLongResponse {
+                        Text(subtitle)
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer()
+
+                if isLongResponse {
+                    Image(systemName: "graduationcap.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.orange.opacity(0.8))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, isLongResponse ? 8 : 14)
+
+            // Scrollable body for long responses
+            if isLongResponse {
+                Divider()
+                    .background(Color.white.opacity(0.1))
+
+                ScrollView {
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineSpacing(4)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
@@ -132,27 +180,27 @@ struct OverlayView: View {
             ZStack {
                 Circle()
                     .fill(Color.green)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 32, height: 32)
                 Image(systemName: "waveform")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white)
             }
         case .thinking:
             ZStack {
                 Circle()
                     .fill(Color.blue)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 32, height: 32)
                 ProgressView()
-                    .scaleEffect(0.6)
+                    .scaleEffect(0.5)
                     .tint(.white)
             }
         case .response:
             ZStack {
                 Circle()
-                    .fill(Color.purple)
-                    .frame(width: 36, height: 36)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 14, weight: .bold))
+                    .fill(isLongResponse ? Color.orange : Color.purple)
+                    .frame(width: 32, height: 32)
+                Image(systemName: isLongResponse ? "brain.head.profile" : "checkmark")
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.white)
             }
         }
@@ -162,7 +210,8 @@ struct OverlayView: View {
         switch viewModel.state {
         case .listening: return "Listening..."
         case .thinking: return "Thinking..."
-        case .response: return "Max"
+        case .response:
+            return isLongResponse ? "Max — Teaching" : "Max"
         }
     }
 

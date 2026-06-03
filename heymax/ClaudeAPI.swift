@@ -3,13 +3,14 @@
 //  heymax
 //
 //  Sends voice commands + optional screenshot to Claude for processing.
-//  Returns a response with text and optional action to execute.
+//  Supports conversation memory for follow-ups and a teaching mode.
 
 import Foundation
 
 struct ClaudeResponse {
     let text: String
     let action: AppAction?
+    let isTeaching: Bool
 }
 
 enum AppAction {
@@ -31,85 +32,102 @@ class ClaudeAPI {
     private let smartModel = "claude-sonnet-4-20250514"
     private let endpoint = "https://api.anthropic.com/v1/messages"
 
+    // Conversation memory — keeps last 10 exchanges
+    private var conversationHistory: [[String: Any]] = []
+    private let maxHistory = 20 // 10 user + 10 assistant messages
+
     private let systemPrompt = """
     You are Max, a helpful AI assistant that lives on the user's Mac. You can see their screen and hear their voice commands.
 
-    When the user asks you to DO something, respond with a JSON action block AND a short friendly response.
+    You have TWO modes:
 
-    Action format — include this JSON at the END of your response, on its own line:
+    ## ACTION MODE (default)
+    When the user asks you to DO something, respond with a short message + action JSON.
+
+    Action format — include at the END, on its own line:
     ###ACTION:{"type":"<type>","value":"<value>"}
 
-    Available action types:
-    - "open_url" — opens a URL in the default browser. Value: the full URL.
-    - "open_app" — opens a macOS app by name. Value: app name (e.g. "Spotify", "Safari", "Discord").
-    - "applescript" — runs an AppleScript command. Value: the script code. Use this for complex Mac automation.
-    - "play_spotify" — searches a song/artist on Spotify. Value: search query.
-    - "search_youtube" — plays/searches something on YouTube. Value: search query.
-    - "set_volume" — sets system volume 0-100. Value: the number.
-    - "type_text" — types text at the current cursor position. Value: the text to type.
+    Available actions:
+    - "open_url" — opens a URL. Value: full URL.
+    - "open_app" — opens an app. Value: app name.
+    - "applescript" — runs AppleScript. Value: script code.
+    - "play_spotify" — searches Spotify. Value: search query.
+    - "search_youtube" — plays on YouTube. Value: search query.
+    - "set_volume" — sets volume 0-100. Value: number.
+    - "type_text" — types text at cursor. Value: the text.
 
-    Examples:
-    User: "play back in black on youtube"
-    Response: Playing Back in Black on YouTube.
-    ###ACTION:{"type":"search_youtube","value":"Back in Black AC/DC"}
+    In action mode: be concise, 1-2 sentences max.
 
-    User: "play only you by keinemusik on spotify"
-    Response: Searching Spotify for Only You by Keinemusik.
-    ###ACTION:{"type":"play_spotify","value":"Only You Keinemusik"}
+    ## TEACH MODE
+    When the user asks you to teach, explain, learn, help understand, walk through, or asks "how does X work", "what is X", "explain X", "teach me X" — switch to teach mode.
 
-    User: "open my revenuecat dashboard"
-    Response: Opening RevenueCat for you.
-    ###ACTION:{"type":"open_url","value":"https://app.revenuecat.com"}
+    In teach mode:
+    - Give clear, structured explanations
+    - Use analogies and real-world examples
+    - Break complex topics into digestible steps
+    - If you can see their screen, reference what's on it specifically
+    - Keep it conversational — like a smart friend explaining over their shoulder
+    - Use short paragraphs, not walls of text
+    - End with a follow-up prompt like "Want me to go deeper on any part?" or "Try it and ask me if you get stuck"
+    - You can be 3-8 sentences in teach mode
 
-    User: "open youtube"
-    Response: Opening YouTube.
-    ###ACTION:{"type":"open_url","value":"https://youtube.com"}
+    ## CONVERSATION
+    You remember recent messages. The user can ask follow-ups like:
+    - "wait, explain that again"
+    - "what did you mean by that?"
+    - "go deeper on the second point"
+    - "actually, do the other thing"
 
-    User: "open my github"
-    Response: Opening GitHub.
-    ###ACTION:{"type":"open_url","value":"https://github.com"}
-
-    User: "set volume to 50"
-    Response: Volume set to 50%.
-    ###ACTION:{"type":"set_volume","value":"50"}
-
-    User: "what's on my screen right now?"
-    Response: [describe what you see in the screenshot]
-
-    User: "put my mac to sleep"
-    Response: Putting your Mac to sleep.
-    ###ACTION:{"type":"applescript","value":"tell application \\"System Events\\" to sleep"}
-
-    User: "toggle dark mode"
-    Response: Toggling dark mode.
-    ###ACTION:{"type":"applescript","value":"tell application \\"System Events\\" to tell appearance preferences to set dark mode to not dark mode"}
-
-    Rules:
-    - Be concise. 1-2 sentences max.
-    - Be casual and friendly, like a buddy.
-    - If you can't do something, say so honestly.
-    - Only include ###ACTION if the user wants you to DO something.
-    - If they're just asking a question, just answer it.
-    - For music: if they say "on youtube" use search_youtube. If they say "on spotify" or just "play" use play_spotify.
-    - For websites: use open_url with the correct URL. You know common dashboards (RevenueCat, Stripe, Vercel, GitHub, Notion, Figma, etc).
-    - For complex Mac tasks: use applescript. You can control any app via AppleScript.
+    ## RULES
+    - Be casual and friendly, like a buddy
+    - If you can't do something, say so
+    - Only include ###ACTION for actual actions, not teaching
+    - For music: "on youtube" → search_youtube, "on spotify" or just "play" → play_spotify
+    - For websites: use open_url. You know common dashboards (RevenueCat, Stripe, Vercel, GitHub, Notion, Figma, etc)
+    - For Mac automation: use applescript
     """
 
-    private let screenKeywords = ["screen", "see", "look", "looking at", "what's this", "what is this", "read", "showing", "display"]
+    // Keywords that trigger teach mode
+    private let teachKeywords = [
+        "teach", "explain", "learn", "how does", "how do", "what is", "what are",
+        "walk me through", "help me understand", "show me how", "tutorial",
+        "why does", "why is", "tell me about", "break down", "guide me",
+        "what's the difference", "how to", "can you explain", "i don't understand",
+        "confused about", "help me with"
+    ]
 
-    private func needsScreenshot(command: String) -> Bool {
+    // Keywords that need screenshot
+    private let screenKeywords = [
+        "screen", "see", "look", "looking at", "what's this", "what is this",
+        "read", "showing", "display", "this code", "this file", "this page",
+        "what's wrong", "debug this", "fix this"
+    ]
+
+    func isTeachingCommand(_ command: String) -> Bool {
         let lower = command.lowercased()
-        return screenKeywords.contains(where: { lower.contains($0) })
+        return teachKeywords.contains(where: { lower.contains($0) })
+    }
+
+    func needsScreenshot(command: String) -> Bool {
+        let lower = command.lowercased()
+        let isTeaching = isTeachingCommand(command)
+        let mentionsScreen = screenKeywords.contains(where: { lower.contains($0) })
+        // Always capture screen in teach mode (context helps) or when explicitly asked
+        return isTeaching || mentionsScreen
     }
 
     func process(command: String, screenshot: String?) async -> ClaudeResponse {
-        let useScreenshot = needsScreenshot(command: command)
-        let model = useScreenshot ? smartModel : fastModel
+        let isTeaching = isTeachingCommand(command)
+        let useScreenshot = screenshot != nil
+        // Use smart model for teaching or screen analysis, fast model for actions
+        let model = (isTeaching || useScreenshot) ? smartModel : fastModel
+        let maxTokens = isTeaching ? 1024 : 256
 
-        var content: [[String: Any]] = []
+        // Build current message content
+        var currentContent: [[String: Any]] = []
 
-        if useScreenshot, let base64 = screenshot {
-            content.append([
+        if let base64 = screenshot {
+            currentContent.append([
                 "type": "image",
                 "source": [
                     "type": "base64",
@@ -119,22 +137,24 @@ class ClaudeAPI {
             ])
         }
 
-        content.append([
+        currentContent.append([
             "type": "text",
             "text": command
         ])
 
+        // Build messages array with history
+        var messages = conversationHistory
+        messages.append(["role": "user", "content": currentContent])
+
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 256,
+            "max_tokens": maxTokens,
             "system": systemPrompt,
-            "messages": [
-                ["role": "user", "content": content]
-            ]
+            "messages": messages
         ]
 
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            return ClaudeResponse(text: "Failed to build request.", action: nil)
+            return ClaudeResponse(text: "Failed to build request.", action: nil, isTeaching: false)
         }
 
         var request = URLRequest(url: URL(string: endpoint)!)
@@ -143,7 +163,7 @@ class ClaudeAPI {
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.timeoutInterval = 15
+        request.timeoutInterval = isTeaching ? 30 : 15
 
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
@@ -152,18 +172,31 @@ class ClaudeAPI {
                   let contentArr = json["content"] as? [[String: Any]],
                   let firstBlock = contentArr.first,
                   let responseText = firstBlock["text"] as? String else {
-                return ClaudeResponse(text: "Couldn't understand the response.", action: nil)
+                return ClaudeResponse(text: "Couldn't understand the response.", action: nil, isTeaching: false)
             }
 
             let action = parseAction(from: responseText)
             let cleanText = responseText.components(separatedBy: "###ACTION:").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? responseText
 
-            return ClaudeResponse(text: cleanText, action: action)
+            // Save to conversation history (without image data to save memory)
+            conversationHistory.append(["role": "user", "content": command])
+            conversationHistory.append(["role": "assistant", "content": responseText])
+
+            // Trim history if too long
+            while conversationHistory.count > maxHistory {
+                conversationHistory.removeFirst(2)
+            }
+
+            return ClaudeResponse(text: cleanText, action: action, isTeaching: isTeaching)
 
         } catch {
             print("[ClaudeAPI] Error: \(error)")
-            return ClaudeResponse(text: "Something went wrong: \(error.localizedDescription)", action: nil)
+            return ClaudeResponse(text: "Something went wrong: \(error.localizedDescription)", action: nil, isTeaching: false)
         }
+    }
+
+    func clearHistory() {
+        conversationHistory.removeAll()
     }
 
     private func parseAction(from text: String) -> AppAction? {
