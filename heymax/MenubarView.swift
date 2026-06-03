@@ -8,6 +8,7 @@ import SwiftUI
 
 struct MenubarView: View {
     @ObservedObject var voice = VoiceEngine.shared
+    @ObservedObject var speech = SpeechOutput.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,6 +49,21 @@ struct MenubarView: View {
                     .padding(.vertical, 10)
                     .background(voice.isListening ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.15))
                     .foregroundColor(voice.isListening ? .red : .accentColor)
+                    .cornerRadius(8)
+                    .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.plain)
+
+                // Voice toggle
+                Button(action: { speech.toggle() }) {
+                    HStack {
+                        Image(systemName: speech.isEnabled ? "speaker.wave.2.fill" : "speaker.slash")
+                        Text(speech.isEnabled ? "Voice On" : "Voice Off")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(speech.isEnabled ? Color.orange.opacity(0.15) : Color.gray.opacity(0.1))
+                    .foregroundColor(speech.isEnabled ? .orange : .secondary)
                     .cornerRadius(8)
                     .font(.system(size: 13, weight: .medium))
                 }

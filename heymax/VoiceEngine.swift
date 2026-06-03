@@ -155,8 +155,11 @@ class VoiceEngine: NSObject, ObservableObject {
 
                 OverlayWindow.shared?.show(state: .response(response.text))
 
-                // Teaching responses stay longer
-                let hideDelay: Double = response.isTeaching ? 15 : 5
+                // Max speaks the response
+                SpeechOutput.shared.speak(response.text)
+
+                // Teaching responses stay longer, or stay until speech finishes
+                let hideDelay: Double = response.isTeaching ? 20 : 6
                 DispatchQueue.main.asyncAfter(deadline: .now() + hideDelay) {
                     OverlayWindow.shared?.hide()
                 }
