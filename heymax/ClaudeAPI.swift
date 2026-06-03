@@ -25,8 +25,8 @@ enum AppAction {
 class ClaudeAPI {
     static let shared = ClaudeAPI()
 
-    // TODO: Move to secure storage before shipping
-    private let apiKey = "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"
+    // Set your Claude API key: https://console.anthropic.com/
+    private let apiKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
     private let fastModel = "claude-haiku-4-5-20251001"
     private let smartModel = "claude-sonnet-4-20250514"
     private let endpoint = "https://api.anthropic.com/v1/messages"
