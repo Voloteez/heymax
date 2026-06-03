@@ -2,7 +2,7 @@
 
 **A voice-controlled AI assistant that lives in your Mac's menubar.**
 
-Say "Hey Max" followed by any command — open apps, play music, control your Mac, ask questions, and more. Powered by Claude.
+Say "Hey Max" followed by any command — open apps, play music, control your Mac, learn new things, and more. Max can see your screen, remember conversations, and teach you stuff in real-time. Powered by Claude.
 
 ![macOS](https://img.shields.io/badge/macOS-15.0+-black?logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.0-orange?logo=swift&logoColor=white)
@@ -16,7 +16,7 @@ Say "Hey Max" followed by any command — open apps, play music, control your Ma
 2. **Click it** and hit **Start Listening**
 3. **Say "Hey Max"** — a floating overlay appears
 4. **Say your command** — pause for 2 seconds
-5. **Max responds** — executes the action and shows the result
+5. **Max responds** — executes the action, answers the question, or teaches you something
 
 No dock icon. No window. Just a menubar icon that's always ready.
 
@@ -50,10 +50,55 @@ No dock icon. No window. Just a menubar icon that's always ready.
 
 ### Analyze your screen
 > "Hey Max, what's on my screen?"
+> "Hey Max, what's wrong with this code?"
 > "Hey Max, read what's showing"
+
+### Teach me anything (NEW)
+> "Hey Max, teach me about async await in Swift"
+> "Hey Max, explain how APIs work"
+> "Hey Max, what's the difference between let and var?"
+> "Hey Max, walk me through setting up a server"
+> "Hey Max, how does this code work?" *(captures your screen)*
+
+### Have a conversation (NEW)
+Max remembers recent messages — ask follow-ups naturally:
+> "Hey Max, what is a closure?"
+> *"Hey Max, give me an example"*
+> *"Hey Max, explain that last part again"*
+> *"Hey Max, go deeper on that"*
 
 ### Run AppleScript (anything)
 Max can run any AppleScript command, which means it can control virtually any app on your Mac.
+
+---
+
+## Two Modes
+
+### Action Mode (default)
+For quick commands — open apps, play music, set volume, open URLs. Uses **Claude Haiku** for speed. No screenshot captured. Responses are 1-2 sentences. Overlay auto-hides after 5 seconds.
+
+### Teach Mode
+Activates when you say "teach me", "explain", "how does X work", "what is X", etc. Uses **Claude Sonnet** for depth. Always captures your screen so Max can reference what you're looking at. Gives structured, detailed explanations. Overlay expands with scrollable content, shows a brain icon, and stays visible for 15 seconds.
+
+| | Action Mode | Teach Mode |
+|---|---|---|
+| **Model** | Claude Haiku (fast) | Claude Sonnet (smart) |
+| **Screenshot** | Only when asked | Always (for context) |
+| **Response length** | 1-2 sentences | 3-8 sentences, structured |
+| **Max tokens** | 256 | 1024 |
+| **Overlay** | Compact, 5s | Expanded + scrollable, 15s |
+| **Trigger** | Any command | "teach", "explain", "how does", etc. |
+
+---
+
+## Conversation Memory
+
+Max keeps the last 10 exchanges in memory. This means:
+
+- **Follow-up questions work** — "explain that again", "go deeper", "what about X?"
+- **Context carries over** — you don't have to repeat yourself
+- **Multi-turn learning** — have a real back-and-forth conversation about a topic
+- **Memory resets** when you restart the app
 
 ---
 
@@ -62,17 +107,25 @@ Max can run any AppleScript command, which means it can control virtually any ap
 ```
 heymaxApp.swift       → Menubar-only app, no dock icon
 VoiceEngine.swift     → Always-on mic, wake word detection, silence-based command capture
-ClaudeAPI.swift       → Sends commands to Claude (Haiku for actions, Sonnet for vision)
+ClaudeAPI.swift       → Smart routing (Haiku/Sonnet), conversation memory, teach detection
 ScreenCapture.swift   → ScreenCaptureKit-based screen capture (only when needed)
-ActionRunner.swift    → Executes actions: open URLs, launch apps, AppleScript, volume, etc.
-OverlayWindow.swift   → Floating overlay UI (listening → thinking → response)
+ActionRunner.swift    → Executes actions: open URLs, launch apps, AppleScript, YouTube, Spotify
+OverlayWindow.swift   → Floating overlay UI — compact for actions, expanded for teaching
 MenubarView.swift     → Popover UI with start/stop and last command display
 ```
 
-### Smart routing
-- **Simple commands** (open app, play music, set volume) → Claude Haiku (fast)
-- **Screen analysis** (what's on my screen?) → Claude Sonnet + screenshot (smart)
-- **No screenshot** is captured unless you ask about your screen
+### Smart Routing
+
+```
+User command
+    ↓
+Detect mode:
+    ├── "open spotify"      → Action Mode  → Haiku,  no screenshot,  256 tokens
+    ├── "set volume to 30"  → Action Mode  → Haiku,  no screenshot,  256 tokens
+    ├── "what's on screen?" → Vision Mode  → Sonnet, + screenshot,   256 tokens
+    ├── "explain closures"  → Teach Mode   → Sonnet, + screenshot,  1024 tokens
+    └── "go deeper on that" → Teach Mode   → Sonnet, + conversation history
+```
 
 ---
 
@@ -98,29 +151,43 @@ Open `heymax.xcodeproj` in Xcode, hit **Cmd+R**.
 macOS will ask for:
 - **Microphone** — for voice capture
 - **Speech Recognition** — for speech-to-text
-- **Screen Recording** — only needed for "what's on my screen" commands
+- **Screen Recording** — for screen capture (teaching + "what's on my screen")
 
 ---
 
 ## Tech Stack
 
 - **SwiftUI** — menubar UI and floating overlay
-- **Speech framework** — on-device speech recognition
-- **ScreenCaptureKit** — screen capture for visual analysis
-- **Claude API** — Haiku for speed, Sonnet for vision
-- **AppleScript** — system automation (volume, dark mode, app control)
+- **Speech framework** — on-device speech recognition with wake word detection
+- **ScreenCaptureKit** — screen capture for visual analysis and teaching context
+- **Claude API** — Haiku for fast actions, Sonnet for teaching and vision
+- **AppleScript** — deep system automation (volume, dark mode, app control, anything)
+- **Conversation memory** — 10-exchange rolling history for natural follow-ups
 
 ---
 
 ## Roadmap
 
-- [ ] Conversation memory (remember context across commands)
+- [x] Voice-activated wake word ("Hey Max")
+- [x] Open apps, URLs, and dashboards
+- [x] Screen capture and visual analysis
+- [x] YouTube search and auto-play
+- [x] Spotify search
+- [x] System control (volume, dark mode, sleep)
+- [x] AppleScript execution (control any app)
+- [x] Smart model routing (Haiku vs Sonnet)
+- [x] Conversation memory (follow-up questions)
+- [x] Teaching mode (detailed explanations, screen context)
+- [x] Expandable overlay for long responses
 - [ ] Custom wake word
-- [ ] Keyboard shortcut trigger (in addition to voice)
+- [ ] Keyboard shortcut trigger
+- [ ] Text-to-speech (Max talks back)
 - [ ] Plugin system for custom actions
-- [ ] Spotify direct playback (via Spotify Web API)
+- [ ] Spotify direct playback
 - [ ] Persistent settings (auto-start, always listening)
 - [ ] Menu bar animation while processing
+- [ ] Multi-monitor support
+- [ ] Clipboard awareness (teach about copied code)
 
 ---
 
