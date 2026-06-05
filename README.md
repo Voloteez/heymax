@@ -141,17 +141,27 @@ Max speaks every response out loud — like having a friend right next to you ex
 
 ---
 
+## Global Hotkey
+
+Press **Option + Space** anywhere to trigger Max — no need to say "Hey Max". Works system-wide, even when the app isn't focused.
+
+- If mic is already listening → goes straight to command capture
+- If mic is off → auto-starts listening, then captures command
+- Uses Carbon `EventHotKey` API for reliable system-wide capture
+
+---
+
 ## Architecture
 
 ```
-heymaxApp.swift       → Menubar-only app, no dock icon
-VoiceEngine.swift     → Always-on mic, wake word detection, silence-based command capture
-ClaudeAPI.swift       → Smart routing (Haiku/Sonnet), conversation memory, teach detection
-ScreenCapture.swift   → ScreenCaptureKit-based screen capture (only when needed)
-ActionRunner.swift    → Executes actions: open URLs, launch apps, AppleScript, YouTube, Spotify
-OverlayWindow.swift   → Floating overlay UI — compact for actions, expanded for teaching
-SpeechOutput.swift    → Text-to-speech using AVSpeechSynthesizer with premium voice selection
-MenubarView.swift     → Popover UI with start/stop, voice toggle, and last command display
+heymaxApp.swift       → Menubar app, no dock icon, global hotkey (Option+Space)
+VoiceEngine.swift     → Always-on mic, wake word detection, silence-based capture, manual trigger
+ClaudeAPI.swift       → Smart routing, retry logic, request cancellation, system context, safety
+ScreenCapture.swift   → ScreenCaptureKit-based capture (half-res, JPEG 0.3 quality for speed)
+ActionRunner.swift    → Open URLs, launch apps, AppleScript, YouTube auto-play, Spotify search
+OverlayWindow.swift   → Floating overlay — compact for actions, expanded + scrollable for teaching
+SpeechOutput.swift    → AVSpeechSynthesizer TTS with premium voice selection
+MenubarView.swift     → Popover UI with mic toggle, voice toggle, last command display
 ```
 
 ### Smart Routing
@@ -159,13 +169,57 @@ MenubarView.swift     → Popover UI with start/stop, voice toggle, and last com
 ```
 User command
     ↓
+Sanitize input (trim, cap at 2000 chars)
+    ↓
 Detect mode:
-    ├── "open spotify"      → Action Mode  → Haiku,  no screenshot,  256 tokens
-    ├── "set volume to 30"  → Action Mode  → Haiku,  no screenshot,  256 tokens
-    ├── "what's on screen?" → Vision Mode  → Sonnet, + screenshot,   256 tokens
-    ├── "explain closures"  → Teach Mode   → Sonnet, + screenshot,  1024 tokens
-    └── "go deeper on that" → Teach Mode   → Sonnet, + conversation history
+    ├── "open spotify"      → Action   → Haiku 4.5,  no screenshot,  256 tokens, 15s timeout
+    ├── "set volume to 30"  → Action   → Haiku 4.5,  no screenshot,  256 tokens, 15s timeout
+    ├── "what's on screen?" → Vision   → Sonnet 4.6, + screenshot,   256 tokens, 15s timeout
+    ├── "explain closures"  → Teach    → Sonnet 4.6, + screenshot,  1024 tokens, 30s timeout
+    └── "go deeper on that" → Teach    → Sonnet 4.6, + conv history, 1024 tokens, 30s timeout
+    ↓
+Attach system context (current time, active app, macOS version)
+    ↓
+Send to Claude API
+    ├── Success → parse response + action → show overlay → speak
+    ├── 429/5xx → retry with exponential backoff (up to 2 retries)
+    ├── 401     → show "Invalid API key" error
+    └── Network error → retry, then show error
+    ↓
+Log: model used, input/output tokens
 ```
+
+### System Context
+
+Every request includes live context so Claude can adapt:
+
+```
+- Current time: Thursday, June 5, 2026 at 2:30 PM
+- Active app: Xcode
+- macOS version: 15.5
+```
+
+This means if you're in Xcode and say "help me with this", Max knows you're coding. If it's 2 AM, it keeps answers brief.
+
+### Retry & Cancellation
+
+| Scenario | Behavior |
+|----------|----------|
+| Rate limited (429) | Retry after 1.5s, then 3s |
+| Server error (5xx) | Retry after 1.5s, then 3s |
+| Network failure | Retry after 1s, then 2s |
+| New command while processing | Cancel previous request |
+| Invalid API key (401) | Show error, no retry |
+
+### Safety
+
+| Layer | Implementation |
+|-------|---------------|
+| Input sanitization | Trim whitespace, cap at 2000 characters |
+| Output sanitization | Strip code fences that confuse TTS |
+| Error handling | Proper HTTP status parsing, user-friendly messages |
+| Token tracking | Every response logs model + input/output token counts |
+| No secrets in prompts | System prompt explicitly forbids outputting passwords/keys |
 
 ---
 
@@ -200,10 +254,13 @@ macOS will ask for:
 - **SwiftUI** — menubar UI and floating overlay
 - **Speech framework** — on-device speech recognition with wake word detection
 - **ScreenCaptureKit** — screen capture for visual analysis and teaching context
-- **Claude API** — Haiku for fast actions, Sonnet for teaching and vision
+- **Claude API** — Haiku 4.5 for fast actions, Sonnet 4.6 for teaching and vision
 - **AVSpeechSynthesizer** — built-in macOS text-to-speech with premium voice support
+- **Carbon EventHotKey** — system-wide global hotkey (Option+Space)
 - **AppleScript** — deep system automation (volume, dark mode, app control, anything)
 - **Conversation memory** — 10-exchange rolling history for natural follow-ups
+- **Retry logic** — exponential backoff on rate limits and server errors
+- **Request cancellation** — new commands cancel in-flight requests
 
 ---
 
@@ -222,8 +279,15 @@ macOS will ask for:
 - [x] Expandable overlay for long responses
 - [x] Text-to-speech (Max talks back with premium macOS voices)
 - [x] Voice on/off toggle in menubar
+- [x] Global hotkey (Option+Space) — trigger without voice
+- [x] System context awareness (current app, time, OS version)
+- [x] Latest models (Sonnet 4.6 + Haiku 4.5)
+- [x] Retry with exponential backoff on API errors
+- [x] Request cancellation (new command cancels old)
+- [x] Input/output safety (length limits, sanitization)
+- [x] Token usage tracking and logging
 - [ ] Custom wake word
-- [ ] Keyboard shortcut trigger
+- [ ] Streaming responses (word by word)
 - [ ] Plugin system for custom actions
 - [ ] Spotify direct playback
 - [ ] Persistent settings (auto-start, always listening)
