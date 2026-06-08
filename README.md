@@ -306,6 +306,7 @@ macOS will ask for:
 - [ ] Timers & reminders — "Hey Max, remind me in 10 minutes to check the build" / "set a 25 min pomodoro"
 - [ ] Text transformation — "Hey Max, make this email more professional" / "translate to French" / "fix the grammar"
 - [ ] Snippet manager — "Hey Max, save this as my email signature" → "Hey Max, paste my email signature"
+- [ ] Quick math & conversions — "Hey Max, 100 USD to EUR" / "what's 18% tip on $85" (instant, no API call)
 
 ### Medium-Term
 - [ ] Plugin system — custom actions via JSON/Swift config files
