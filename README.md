@@ -337,6 +337,7 @@ macOS will ask for:
 - [ ] iOS companion app — continue conversations from your phone
 - [ ] Team mode — shared knowledge base for dev teams ("How does our auth flow work?")
 - [ ] MCP integration — connect to any tool via Model Context Protocol
+- [ ] Accessibility controls — "Hey Max, make text bigger" / "turn on Do Not Disturb" / "increase contrast"
 - [ ] App Store release — signed, notarized, auto-update via Sparkle
 
 ---
