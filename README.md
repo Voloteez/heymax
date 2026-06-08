@@ -322,6 +322,7 @@ macOS will ask for:
 - [ ] Always-on ambient mode — Max listens passively, offers help proactively ("I noticed an error on your screen")
 - [ ] Workflow recording — "Hey Max, watch what I do and remember it" → replayable macros
 - [ ] Screen region selection — highlight a portion of screen to ask about
+- [ ] Context switching — "Hey Max, switch to coding mode" → opens Xcode + Terminal, closes Slack + Discord
 - [ ] Multi-app orchestration — "Move this Figma design into a new Notion page"
 - [ ] Voice cloning — Max sounds like you (or anyone you choose)
 - [ ] iOS companion app — continue conversations from your phone
