@@ -303,6 +303,7 @@ macOS will ask for:
 - [ ] Copy response button — one-click copy from overlay
 - [ ] Pin overlay — keep teaching response visible while you work
 - [ ] Window management — "Hey Max, put this window on the left half" / "make it fullscreen" / "tile these two apps"
+- [ ] Timers & reminders — "Hey Max, remind me in 10 minutes to check the build" / "set a 25 min pomodoro"
 
 ### Medium-Term
 - [ ] Plugin system — custom actions via JSON/Swift config files
