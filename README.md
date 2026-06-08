@@ -305,6 +305,7 @@ macOS will ask for:
 - [ ] Window management — "Hey Max, put this window on the left half" / "make it fullscreen" / "tile these two apps"
 - [ ] Timers & reminders — "Hey Max, remind me in 10 minutes to check the build" / "set a 25 min pomodoro"
 - [ ] Text transformation — "Hey Max, make this email more professional" / "translate to French" / "fix the grammar"
+- [ ] Snippet manager — "Hey Max, save this as my email signature" → "Hey Max, paste my email signature"
 
 ### Medium-Term
 - [ ] Plugin system — custom actions via JSON/Swift config files
